@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Editable JSON Table Format</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 28px;
+      margin-bottom: 30px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border: 1px solid #ddd;
+    }
+
+    th {
+      background-color: #007bff;
+      color: white;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+
+    .input-field {
+      padding: 5px;
+      font-size: 14px;
+      width: 250px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+
+    .input-field:focus {
+      border-color: #007bff;
+    }
+
+    .nested {
+      display: none;
+      padding-left: 20px;
+    }
+
+    .active {
+      display: block;
+    }
+
+    .collapsible {
+      cursor: pointer;
+      color: #007bff;
+      font-weight: bold;
+      text-decoration: underline;
+    }
+
+    .collapsible:hover {
+      color: #0056b3;
+    }
+
+    /* Positioning the buttons above the content */
+    .buttons-container {
+      display: flex;
+      justify-content: flex-start;
+      gap: 15px;
+      margin-bottom: 20px; /* Space between buttons and the table */
+    }
+
+    .add-button, #saveButton, #expandAllButton, #collapseAllButton, #removeSelectedButton {
+      padding: 12px 18px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    .add-button:hover, #saveButton:hover, #expandAllButton:hover, #collapseAllButton:hover, #removeSelectedButton:hover {
+      background-color: #218838;
+    }
+
+    .add-button {
+      background-color: #007bff;
+    }
+
+    .add-button:hover {
+      background-color: #0056b3;
+    }
+
+    .remove-button {
+      padding: 8px 12px;
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      margin-left: 10px;
+    }
+
+    .remove-button:hover {
+      background-color: #c82333;
+    }
+
+    /* Clear Icon styling */
+    .clear-icon {
+      position: absolute;
+      top: 50%;
+      right: 10px;
+      transform: translateY(-50%);
+      font-size: 16px;
+      color: #999;
+      cursor: pointer;
+    }
+
+    .clear-icon:hover {
+      color: #007bff;
+    }
+
+    .input-container {
+      position: relative;
+    }
+
+    /* Collapsible object header */
+    .object-header {
+      cursor: pointer;
+      color: #007bff;
+      font-weight: bold;
+      background-color: #e7f3ff;
+      padding: 10px;
+      text-align: left;
+      display: flex;
+      align-items: center;
+    }
+
+    .object-header:hover {
+      background-color: #cce5ff;
+    }
+
+    .object-content {
+      display: none;
+      padding-left: 20px;
+      padding-top: 10px;
+    }
+
+    .object-header + .object-content.active {
+      display: block;
+    }
+
+    .checkbox-container {
+      margin-right: 10px;
+    }
+
+    /* File input styling */
+    #fileInput {
+      display: none;
+    }
+
+    label[for="fileInput"] {
+      background-color: #007bff;
+      color: white;
+      padding: 12px 18px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Editable JSON Table Format</h1>
+
+  <!-- Buttons positioned above the table -->
+  <div class="buttons-container">
+    <button class="add-button" id="addButton">Add Object</button>
+    <label for="fileInput">Load JSON File</label>
+    <input type="file" id="fileInput" accept="application/json">
+    <button id="saveButton">Save JSON</button>
+    <button id="expandAllButton">Expand All</button>
+    <button id="collapseAllButton">Collapse All</button>
+    <button id="removeSelectedButton">Remove Selected</button>
+  </div>
+
+  <div id="jsonContainer"></div>
+
+  <script>
+    let jsonData = [
+      {
+        name: "John Doe",
+        age: 30,
+        skills: ["JavaScript", "HTML", "CSS"],
+        address: {
+          street: "123 Main St",
+          city: "New York",
+          country: "USA"
+        }
+      }
+    ];
+
+    // Template for a new object
+    const objectTemplate = {
+      name: "",
+      age: "",
+      skills: [],
+      address: {
+        street: "",
+        city: "",
+        country: ""
+      }
+    };
+
+    // Recursive function to generate rows for table
+    function createTable(json, parent) {
+      for (const key in json) {
+        const row = document.createElement("tr");
+
+        const keyCell = document.createElement("td");
+        keyCell.textContent = key;
+        row.appendChild(keyCell);
+
+        const valueCell = document.createElement("td");
+        
+        if (typeof json[key] === "object" && json[key] !== null) {
+          const collapseButton = document.createElement("button");
+          collapseButton.textContent = "+";
+          collapseButton.classList.add("collapsible");
+          collapseButton.onclick = function () {
+            const nestedTable = row.querySelector(".nested");
+            nestedTable.classList.toggle("active");
+            collapseButton.textContent = nestedTable.classList.contains("active") ? "-" : "+";
+          };
+          valueCell.appendChild(collapseButton);
+
+          const nestedTable = document.createElement("table");
+          nestedTable.classList.add("nested");
+          createTable(json[key], nestedTable); // Recursively create table for nested object
+          valueCell.appendChild(nestedTable);
+        } else {
+          const inputContainer = document.createElement("div");
+          inputContainer.classList.add("input-container");
+
+          const input = document.createElement("input");
+          input.type = "text";
+          input.value = Array.isArray(json[key]) ? json[key].join(", ") : json[key];
+          input.classList.add("input-field");
+
+          input.oninput = function () {
+            json[key] = input.value;
+            if (Array.isArray(json[key])) {
+              json[key] = input.value.split(",").map(item => item.trim());
+            }
+          };
+
+          // Create the clear icon
+          const clearIcon = document.createElement("span");
+          clearIcon.textContent = "×";
+          clearIcon.classList.add("clear-icon");
+          clearIcon.onclick = function() {
+            input.value = ""; // Clear the input field value
+            json[key] = Array.isArray(json[key]) ? [] : ""; // Update the JSON object
+          };
+
+          inputContainer.appendChild(input);
+          inputContainer.appendChild(clearIcon); // Append the clear icon next to input
+          valueCell.appendChild(inputContainer); // Add the input container to the value cell
+        }
+
+        row.appendChild(valueCell);
+        parent.appendChild(row);
+      }
+    }
+
+    // Add a new object based on the template
+    function addNewObject() {
+      const newObject = { ...objectTemplate }; // Create a copy of the template
+      jsonData.push(newObject); // Add the new object to the jsonData array
+      renderJSON(); // Re-render the JSON data
+    }
+
+    // Remove an object from the jsonData array
+    function removeObject(index) {
+      jsonData.splice(index, 1); // Remove the object at the specified index
+      renderJSON(); // Re-render the JSON data
+    }
+
+    // Render the JSON data in table format
+    function renderJSON() {
+      const container = document.getElementById("jsonContainer");
+      container.innerHTML = ""; // Clear existing content
+
+      // Render all objects in the jsonData array
+      jsonData.forEach((object, index) => {
+        const objectDiv = document.createElement("div");
+        
+        // Object header with checkbox
+        const header = document.createElement("div");
+        header.classList.add("object-header");
+
+        const checkboxContainer = document.createElement("div");
+        checkboxContainer.classList.add("checkbox-container");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.classList.add("object-checkbox");
+        checkbox.dataset.index = index; // Store the index of the object in the checkbox
+        checkboxContainer.appendChild(checkbox);
+        header.appendChild(checkboxContainer);
+
+        const objectLabel = document.createElement("span");
+        objectLabel.textContent = `Object ${index + 1}`;
+        header.appendChild(objectLabel);
+        
+        objectDiv.appendChild(header);
+
+        // Object content
+        const objectContent = document.createElement("div");
+        objectContent.classList.add("object-content");
+        createTable(object, objectContent);
+        objectDiv.appendChild(objectContent);
+
+        // Toggle the visibility of the object content when the header is clicked
+        header.onclick = function() {
+          const isActive = objectContent.classList.contains("active");
+          objectContent.classList.toggle("active");
+        };
+
+        container.appendChild(objectDiv);
+      });
+    }
+
+    // Remove selected objects
+    function removeSelectedObjects() {
+      const checkboxes = document.querySelectorAll(".object-checkbox:checked");
+      const selectedIndexes = Array.from(checkboxes).map(checkbox => parseInt(checkbox.dataset.index));
+      
+      // Remove the selected objects in reverse order to avoid shifting indices
+      selectedIndexes.sort((a, b) => b - a).forEach(index => {
+        removeObject(index);
+      });
+    }
+
+    // Expand or collapse all nested fields
+    function toggleAllCollapse(expand) {
+      const objectDivs = document.querySelectorAll(".object-header");
+      objectDivs.forEach(header => {
+        const objectContent = header.nextElementSibling; // Get the associated object content
+        const isActive = objectContent.classList.contains("active");
+
+        if (expand && !isActive) {
+          objectContent.classList.add("active");
+        } else if (!expand && isActive) {
+          objectContent.classList.remove("active");
+        }
+      });
+    }
+
+    // Save JSON as a file
+    function saveJSON() {
+      // Convert the jsonData array to a formatted JSON string
+      const jsonString = JSON.stringify(jsonData, null, 2);
+
+      // Create a Blob from the JSON string
+      const blob = new Blob([jsonString], { type: "application/json" });
+
+      // Create a download link for the Blob
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "updated-data.json"; // Set the default filename for download
+
+      // Trigger the download by simulating a click event
+      link.click();
+    }
+
+    // Load JSON from file
+    function loadJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          jsonData = JSON.parse(e.target.result);
+          renderJSON(); // Re-render the JSON data after loading
+        } catch (error) {
+          alert("Invalid JSON file");
+        }
+      };
+
+      reader.readAsText(file); // Read the file content
+    }
+
+    // Event listeners
+    document.getElementById("addButton").onclick = addNewObject; // Add new object when button is clicked
+    document.getElementById("saveButton").onclick = saveJSON; // Save JSON when button is clicked
+    document.getElementById("expandAllButton").onclick = function() { toggleAllCollapse(true); }; // Expand all
+    document.getElementById("collapseAllButton").onclick = function() { toggleAllCollapse(false); }; // Collapse all
+    document.getElementById("removeSelectedButton").onclick = removeSelectedObjects; // Remove selected objects
+    document.getElementById("fileInput").addEventListener("change", loadJSON); // Load JSON file
+
+    // Initial render of the JSON data
+    renderJSON();
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
