@@ -177,3 +177,147 @@ function filterTable() {
 populateTable(jsonData);
 populateSummaryTable(jsonData);
 updatePieChart(jsonData);
+
+
+
+// Sample JSON data (replace with actual fetch from a JSON file)
+const jsonData = [
+  { "cn_name": "example1.com", "expiry_date": "2025-03-15" },
+  { "cn_name": "example2.com", "expiry_date": "2025-05-20" },
+  { "cn_name": "example3.com", "expiry_date": "2025-01-10" }
+];
+
+// Function to calculate days until expiry
+function getDaysUntilExpiry(expiryDate) {
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const timeDiff = expiry - today;
+  return Math.ceil(timeDiff / (1000 * 60 * 60 * 24)); // Convert milliseconds to days
+}
+
+// Function to determine status and color
+function getStatus(daysUntilExpiry) {
+  if (daysUntilExpiry <= 30) return { status: "Expiring Soon (≤ 30 days)", color: "red" };
+  if (daysUntilExpiry <= 60) return { status: "Expiring in 31–60 Days", color: "orange" };
+  if (daysUntilExpiry <= 90) return { status: "Expiring in 61–90 Days", color: "yellow" };
+  return { status: "Valid (> 90 Days)", color: "green" };
+}
+
+// Function to count certificates by status
+function getSummary(data) {
+  const summary = {
+    "Expiring Soon (≤ 30 days)": 0,
+    "Expiring in 31–60 Days": 0,
+    "Expiring in 61–90 Days": 0,
+    "Valid (> 90 Days)": 0
+  };
+
+  data.forEach(cert => {
+    const daysUntilExpiry = getDaysUntilExpiry(cert.expiry_date);
+    const { status } = getStatus(daysUntilExpiry);
+    summary[status]++;
+  });
+
+  return summary;
+}
+
+// Function to calculate percentages
+function calculatePercentages(data) {
+  const summary = getSummary(data);
+  const total = Object.values(summary).reduce((sum, count) => sum + count, 0);
+  const percentages = {};
+
+  for (const [status, count] of Object.entries(summary)) {
+    percentages[status] = ((count / total) * 100).toFixed(2) + "%";
+  }
+
+  return percentages;
+}
+
+// Function to populate the summary table
+function populateSummaryTable(data) {
+  const summary = getSummary(data);
+  const tbody = document.querySelector("#summaryTable tbody");
+  tbody.innerHTML = ""; // Clear existing rows
+
+  for (const [status, count] of Object.entries(summary)) {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${status}</td>
+      <td>${count}</td>
+    `;
+    tbody.appendChild(row);
+  }
+}
+
+// Function to populate the certificate table
+function populateTable(data) {
+  const tbody = document.querySelector("#certTable tbody");
+  tbody.innerHTML = ""; // Clear existing rows
+
+  data.forEach(cert => {
+    const daysUntilExpiry = getDaysUntilExpiry(cert.expiry_date);
+    const { status, color } = getStatus(daysUntilExpiry);
+
+    const row = document.createElement("tr");
+    row.classList.add(color);
+    row.innerHTML = `
+      <td>${cert.cn_name}</td>
+      <td>${cert.expiry_date}</td>
+      <td>${status}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// Function to update the pie chart
+function updatePieChart(data) {
+  const summary = getSummary(data);
+  const percentages = calculatePercentages(data);
+  const ctx = document.getElementById("pieChart").getContext("2d");
+
+  if (window.pieChart) {
+    window.pieChart.destroy(); // Destroy existing chart
+  }
+
+  window.pieChart = new Chart(ctx, {
+    type: "pie",
+    data: {
+      labels: Object.keys(summary).map(status => `${status} (${percentages[status]})`),
+      datasets: [{
+        data: Object.values(summary),
+        backgroundColor: ["#ffcccc", "#ffd699", "#ffff99", "#ccffcc"]
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const label = context.label || "";
+              const value = context.raw || 0;
+              const percentage = percentages[context.label.split(" (")[0]];
+              return `${label}: ${value} (${percentage})`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// Function to filter the table by CN Name
+function filterTable() {
+  const searchValue = document.getElementById("search").value.toLowerCase();
+  const filteredData = jsonData.filter(cert => cert.cn_name.toLowerCase().includes(searchValue));
+  populateTable(filteredData);
+  populateSummaryTable(filteredData);
+  updatePieChart(filteredData);
+}
+
+// Initial load
+populateTable(jsonData);
+populateSummaryTable(jsonData);
+updatePieChart(jsonData);
