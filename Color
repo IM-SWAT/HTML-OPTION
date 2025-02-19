@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Certificate Expiry Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px; text-align: left; border: 1px solid #ddd; }
+    .red { background-color: #ffcccc; }
+    .orange { background-color: #ffd699; }
+    .yellow { background-color: #ffff99; }
+    .green { background-color: #ccffcc; }
+    #search { margin-bottom: 20px; padding: 5px; width: 300px; }
+  </style>
+</head>
+<body>
+  <h1>Certificate Expiry Dashboard</h1>
+  <input type="text" id="search" placeholder="Search by CN Name..." oninput="filterTable()">
+  <table id="certTable">
+    <thead>
+      <tr>
+        <th>CN Name</th>
+        <th>Expiry Date</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Rows will be populated by JavaScript -->
+    </tbody>
+  </table>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
+
+// Sample JSON data (replace with actual fetch from a JSON file)
+const jsonData = [
+  { "cn_name": "example1.com", "expiry_date": "2025-03-15" },
+  { "cn_name": "example2.com", "expiry_date": "2025-05-20" },
+  { "cn_name": "example3.com", "expiry_date": "2025-01-10" }
+];
+
+// Function to calculate days until expiry
+function getDaysUntilExpiry(expiryDate) {
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const timeDiff = expiry - today;
+  return Math.ceil(timeDiff / (1000 * 60 * 60 * 24)); // Convert milliseconds to days
+}
+
+// Function to determine status and color
+function getStatus(daysUntilExpiry) {
+  if (daysUntilExpiry <= 30) return { status: "Expiring Soon", color: "red" };
+  if (daysUntilExpiry <= 60) return { status: "Expiring in 60 Days", color: "orange" };
+  if (daysUntilExpiry <= 90) return { status: "Expiring in 90 Days", color: "yellow" };
+  return { status: "Valid", color: "green" };
+}
+
+// Function to populate the table
+function populateTable(data) {
+  const tbody = document.querySelector("#certTable tbody");
+  tbody.innerHTML = ""; // Clear existing rows
+
+  data.forEach(cert => {
+    const daysUntilExpiry = getDaysUntilExpiry(cert.expiry_date);
+    const { status, color } = getStatus(daysUntilExpiry);
+
+    const row = document.createElement("tr");
+    row.classList.add(color);
+    row.innerHTML = `
+      <td>${cert.cn_name}</td>
+      <td>${cert.expiry_date}</td>
+      <td>${status}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// Function to filter the table by CN Name
+function filterTable() {
+  const searchValue = document.getElementById("search").value.toLowerCase();
+  const filteredData = jsonData.filter(cert => cert.cn_name.toLowerCase().includes(searchValue));
+  populateTable(filteredData);
+}
+
+// Initial load
+populateTable(jsonData);
