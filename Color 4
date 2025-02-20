@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Certificate Expiry Dashboard</title>
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css">
+  <style>
+    body { font-family: Arial, sans-serif; }
+    .red { background-color: #ffcccc; }
+    .orange { background-color: #ffd699; }
+    .yellow { background-color: #ffff99; }
+    .green { background-color: #ccffcc; }
+    #search { margin-bottom: 20px; padding: 5px; width: 300px; }
+    .summary { margin-bottom: 20px; }
+    .chart-container { width: 300px; height: 300px; margin: auto; }
+    a { color: #007bff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .buttons { margin-bottom: 20px; }
+    .buttons button { margin-right: 10px; padding: 5px 10px; cursor: pointer; }
+    .table-footer { margin-top: 10px; font-weight: bold; }
+  </style>
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <!-- DataTables JS -->
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>Certificate Expiry Dashboard</h1>
+  <div class="buttons">
+    <input type="text" id="search" placeholder="Search by any string..." oninput="filterTable()">
+    <button onclick="refreshPage()">Refresh</button>
+    <button onclick="copyTable()">Copy Table</button>
+  </div>
+
+  <!-- Summary Table -->
+  <div class="summary">
+    <h2>Summary</h2>
+    <table id="summaryTable">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Count</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Rows will be populated by JavaScript -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pie Chart -->
+  <div class="chart-container">
+    <canvas id="pieChart"></canvas>
+  </div>
+
+  <!-- Certificate Table -->
+  <h2>Certificates</h2>
+  <table id="certTable" class="display">
+    <thead>
+      <tr>
+        <th>CN Name</th>
+        <th>Expiry Date</th>
+        <th>Note</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Rows will be populated by JavaScript -->
+    </tbody>
+  </table>
+  <div class="table-footer" id="tableFooter"></div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
+
+
+// Sample JSON data
+const jsonData = [
+  { "cn_name": "example1.com", "expiry_date": "2025-03-15", "Note": "test" },
+  { "cn_name": "example2.com", "expiry_date": "2025-05-20", "Note": "test2" },
+  { "cn_name": "example3.com", "expiry_date": "2025-01-10", "Note": "tesddt" }
+];
+
+// Initialize DataTable
+let dataTable;
+
+// Function to calculate days until expiry
+function getDaysUntilExpiry(expiryDate) {
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const timeDiff = expiry - today;
+  return Math.ceil(timeDiff / (1000 * 60 * 60 * 24)); // Convert milliseconds to days
+}
+
+// Function to determine status and color
+function getStatus(daysUntilExpiry) {
+  if (daysUntilExpiry <= 30) return { status: "Expiring Soon (≤ 30 days)", color: "red" };
+  if (daysUntilExpiry <= 60) return { status: "Expiring in 31–60 Days", color: "orange" };
+  if (daysUntilExpiry <= 90) return { status: "Expiring in 61–90 Days", color: "yellow" };
+  return { status: "Valid (> 90 Days)", color: "green" };
+}
+
+// Function to count certificates by status
+function getSummary(data) {
+  const summary = {
+    "Expiring Soon (≤ 30 days)": 0,
+    "Expiring in 31–60 Days": 0,
+    "Expiring in 61–90 Days": 0,
+    "Valid (> 90 Days)": 0
+  };
+
+  data.forEach(cert => {
+    const daysUntilExpiry = getDaysUntilExpiry(cert.expiry_date);
+    const { status } = getStatus(daysUntilExpiry);
+    summary[status]++;
+  });
+
+  return summary;
+}
+
+// Function to calculate percentages
+function calculatePercentages(data) {
+  const summary = getSummary(data);
+  const total = Object.values(summary).reduce((sum, count) => sum + count, 0);
+  const percentages = {};
+
+  for (const [status, count] of Object.entries(summary)) {
+    percentages[status] = ((count / total) * 100).toFixed(2) + "%";
+  }
+
+  return percentages;
+}
+
+// Function to populate the summary table with hyperlinked counts
+function populateSummaryTable(data) {
+  const summary = getSummary(data);
+  const tbody = document.querySelector("#summaryTable tbody");
+  tbody.innerHTML = ""; // Clear existing rows
+
+  for (const [status, count] of Object.entries(summary)) {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${status}</td>
+      <td><a href="#" onclick="filterByStatus('${status}')">${count}</a></td>
+    `;
+    tbody.appendChild(row);
+  }
+}
+
+// Function to filter by status (for hyperlinked counts)
+function filterByStatus(status) {
+  const filteredData = jsonData.filter(cert => {
+    const daysUntilExpiry = getDaysUntilExpiry(cert.expiry_date);
+    const certStatus = getStatus(daysUntilExpiry).status;
+    return certStatus === status;
+  });
+  populateTable(filteredData);
+  updatePieChart(filteredData);
+  updateTableFooter(filteredData);
+}
+
+// Function to populate the certificate table using DataTables
+function populateTable(data) {
+  // Clear existing DataTable (if any)
+  if ($.fn.DataTable.isDataTable("#certTable")) {
+    dataTable.destroy();
+  }
+
+  // Clear the table body
+  const tbody = document.querySelector("#certTable tbody");
+  tbody.innerHTML = "";
+
+  // Add rows to the table
+  data.forEach(cert => {
+    const daysUntilExpiry = getDaysUntilExpiry(cert.expiry_date);
+    const { status, color } = getStatus(daysUntilExpiry);
+
+    const row = document.createElement("tr");
+    row.classList.add(color);
+    row.innerHTML = `
+      <td>${cert.cn_name}</td>
+      <td>${cert.expiry_date}</td>
+      <td>${cert.Note}</td>
+      <td>${status}</td>
+    `;
+    tbody.appendChild(row);
+  });
+
+  // Initialize DataTable
+  dataTable = $("#certTable").DataTable({
+    paging: true,
+    searching: true,
+    ordering: true,
+    info: true,
+  });
+
+  updateTableFooter(data);
+}
+
+// Function to update the table footer with total and filtered counts
+function updateTableFooter(data) {
+  const totalCount = jsonData.length;
+  const filteredCount = data.length;
+  const footer = document.getElementById("tableFooter");
+  footer.textContent = `Total Certificates: ${totalCount} | Filtered Certificates: ${filteredCount}`;
+}
+
+// Function to update the pie chart
+function updatePieChart(data) {
+  const summary = getSummary(data);
+  const percentages = calculatePercentages(data);
+  const ctx = document.getElementById("pieChart").getContext("2d");
+
+  if (window.pieChart) {
+    window.pieChart.destroy(); // Destroy existing chart
+  }
+
+  window.pieChart = new Chart(ctx, {
+    type: "pie",
+    data: {
+      labels: Object.keys(summary).map(status => `${status} (${percentages[status]})`),
+      datasets: [{
+        data: Object.values(summary),
+        backgroundColor: ["#ffcccc", "#ffd699", "#ffff99", "#ccffcc"]
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const label = context.label || "";
+              const value = context.raw || 0;
+              const percentage = percentages[context.label.split(" (")[0]];
+              return `${label}: ${value} (${percentage})`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// Function to filter the table by any string
+function filterTable() {
+  const searchValue = document.getElementById("search").value.toLowerCase();
+  const filteredData = jsonData.filter(cert => {
+    const daysUntilExpiry = getDaysUntilExpiry(cert.expiry_date);
+    const { status } = getStatus(daysUntilExpiry);
+    return (
+      cert.cn_name.toLowerCase().includes(searchValue) ||
+      cert.expiry_date.toLowerCase().includes(searchValue) ||
+      cert.Note.toLowerCase().includes(searchValue) ||
+      status.toLowerCase().includes(searchValue)
+    );
+  });
+  populateTable(filteredData);
+  populateSummaryTable(filteredData);
+  updatePieChart(filteredData);
+}
+
+// Function to refresh the page
+function refreshPage() {
+  window.location.reload();
+}
+
+// Function to copy the table data to clipboard in table format
+function copyTable() {
+  const table = document.getElementById("certTable");
+  let text = "";
+
+  // Add headers
+  const headers = table.querySelectorAll("th");
+  text += Array.from(headers)
+    .map(header => header.innerText.trim()) // Use innerText for visible text
+    .join("\t") + "\n";
+
+  // Add rows
+  const rows = table.querySelectorAll("tbody tr");
+  rows.forEach(row => {
+    const cells = row.querySelectorAll("td");
+    text += Array.from(cells)
+      .map(cell => cell.innerText.trim()) // Use innerText for visible text
+      .join("\t") + "\n";
+  });
+
+  // Create a temporary textarea to copy the text
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    // Copy the text to the clipboard
+    const successful = document.execCommand("copy");
+    if (successful) {
+      alert("Table copied to clipboard! You can paste it into a spreadsheet or text editor.");
+    } else {
+      alert("Failed to copy table. Please try again.");
+    }
+  } catch (err) {
+    alert("Failed to copy table. Please check your browser permissions.");
+  } finally {
+    // Clean up
+    document.body.removeChild(textarea);
+  }
+}
+
+// Initial load
+populateTable(jsonData);
+populateSummaryTable(jsonData);
+updatePieChart(jsonData);
+updateTableFooter(jsonData);
