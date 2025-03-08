@@ -1,0 +1,29 @@
+#!/bin/bash
+
+# Define the log directories
+LOG_DIRS=(
+    "/path/to/jboss/logs"
+    "/path/to/another/logs"
+    "/path/to/yet/another/logs"
+)
+
+# Loop through each log directory
+for LOG_DIR in "${LOG_DIRS[@]}"; do
+    # Check if the directory exists
+    if [ -d "$LOG_DIR" ]; then
+        echo "Processing logs in directory: $LOG_DIR"
+
+        # Find and zip log files older than 30 days (both server.log and access.log)
+        find "$LOG_DIR" \( -name "server.log.*" -o -name "access.log.*" \) -type f -mtime +30 | while read -r file; do
+            # Zip the file
+            gzip "$file"
+            echo "Zipped: $file"
+        done
+
+        # Delete zipped log files older than 30 days (both server.log and access.log)
+        find "$LOG_DIR" \( -name "server.log.*.gz" -o -name "access.log.*.gz" \) -type f -mtime +30 -exec rm -f {} \;
+        echo "Deleted zipped logs older than 30 days in directory: $LOG_DIR"
+    else
+        echo "Directory does not exist: $LOG_DIR. Skipping..."
+    fi
+done
